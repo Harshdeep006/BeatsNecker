@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>BeatsNecker OS — Harshdeep Herenj</title>
+
+  <!-- Viewport: safe-area + modern sizing -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+  <!-- Android address bar theming -->
+  <meta name="theme-color" content="#06080b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+
+  <meta name="description" content="BeatsNecker OS — Harshdeep Herenj. Ultra-futuristic single-file portfolio: 3D hologram, music-reactive visuals, AI OS windows, terminal, and advanced interactions." />
+
+  <!-- Fonts + Three.js + GLTFLoader (CDN used for convenience; single-file CSS/JS otherwise) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/three@0.155.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.155.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <style>
+    /* ======================
+       Core variables & reset
+       ====================== */
+    :root{
+      --bg:#05070b;
+      --panel: rgba(255,255,255,0.03);
+      --muted:#9fb2c9;
+      --accent-a: #66e0ff;
+      --accent-b: #9b6bff;
+      --accent-c: #7effa3;
+      --glass-shadow: 0 20px 60px rgba(2,6,23,.6);
+      --radius:18px;
+      --ease:cubic-bezier(.16,.84,.44,1);
+
+      /* Mobile ergonomics */
+      --tap-size: 44px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{
+      height:100%;
+      min-height:100svh; /* modern mobile viewport */
+      background:linear-gradient(180deg,#04050a 0%, #07101a 60%);
+      background-color:#06080b; /* fallback beneath gradients */
+      color:#e9f6ff;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    }
+    a{color:var(--accent-a); text-decoration:none}
+    button{font:inherit}
+
+    /* ======================
+       Layout / header / HUD
+       ====================== */
+    header{
+      position:fixed;top:0;left:0;right:0;z-index:120;
+      padding:calc(env(safe-area-inset-top, 0px) + 10px) 18px 10px;
+      display:flex;align-items:center;justify-content:space-between;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      background:linear-gradient(180deg, rgba(6,7,9,.86), rgba(6,7,9,.22));
+      border-bottom:1px solid rgba(255,255,255,.02)
+    }
+    .hud{max-width:1280px;margin:0 auto;display:flex;align-items:center;gap:12px;width:100%;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .badge{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-weight:900;color:#061013;background:conic-gradient(from 0deg,var(--accent-a),var(--accent-b),var(--accent-c),var(--accent-a));box-shadow:0 8px 32px rgba(0,0,0,.4) inset}
+    nav.primary{display:flex;gap:10px}
+    nav.primary a{padding:8px 10px;border-radius:10px;color:var(--muted);font-weight:600;position:relative;min-height:var(--tap-size)}
+    nav.primary a.active:after{content:"";position:absolute;left:10px;right:10px;bottom:6px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--accent-a),var(--accent-b));transform:scaleX(1)}
+    .hud-actions{display:flex;gap:8px;align-items:center}
+    .btn{
+      padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.04);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      color:inherit;cursor:pointer;min-height:var(--tap-size);touch-action:manipulation
+    }
+    .btn.primary{background:linear-gradient(90deg,var(--accent-a),var(--accent-b));color:#041017;box-shadow:0 12px 36px rgba(0,255,242,.06)}
+
+    /* ======================
+       Background layers
+       ====================== */
+    canvas#bg3d{position:fixed;inset:0;z-index:-6;display:block}
+    .aurora{
+      position:fixed;inset:-20vh -10vw;z-index:-5;filter:blur(80px) saturate(120%);pointer-events:none;background:
+      radial-gradient(60vw 55vw at 12% 18%, rgba(155,107,255,.12), transparent 30%),
+      radial-gradient(50vw 45vw at 88% 28%, rgba(102,224,255,.10), transparent 30%),
+      radial-gradient(40vw 35vw at 50% 88%, rgba(126,255,163,.06), transparent 30%);
+      animation: auradrift 22s ease-in-out infinite alternate
+    }
+    @keyframes auradrift{to{transform:translateY(-6vh) scale(1.03)}}
+    .grain{position:fixed;inset:0;pointer-events:none;opacity:.03;background-image:linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px);background-size:100% 4px;mix-blend-mode:overlay;z-index:-4}
+
+    /* ======================
+       Main content container
+       ====================== */
+    main{
+      max-width:1200px;
+      margin:calc(70px + env(safe-area-inset-top, 0px)) auto 140px;
+      padding:0 20px;
+      min-height:calc(100svh - 220px);
+    }
+    .section{
+      margin:22px 0;padding:18px;border-radius:var(--radius);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      border:1px solid rgba(255,255,255,.03);box-shadow:var(--glass-shadow);
+
+      /* Perf: skip offscreen work on mobile */
+      content-visibility:auto;
+      contain-intrinsic-size:800px;
+    }
+    .hero{display:grid;grid-template-columns: 1fr 420px;gap:20px;align-items:center}
+    @media(max-width:980px){ .hero{grid-template-columns:1fr} }
+    h1.title{font-family: 'Orbitron', monospace;color:var(--accent-a);font-size:clamp(28px,5.6vw,48px);margin-bottom:6px}
+    p.lead{color:#d6eefc;line-height:1.6}
+    .profile{display:flex;gap:14px;align-items:center}
+    .profile-img{width:140px;height:140px;border-radius:12px;object-fit:cover;border:1px solid rgba(255,255,255,.04);box-shadow:0 22px 40px rgba(0,0,0,.6)}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .chip{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.03);font-size:13px;color:var(--muted)}
+
+    /* ======================
+       Projects grid
+       ====================== */
+    .projects-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    @media(max-width:1100px){.projects-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:700px){.projects-grid{grid-template-columns:1fr}}
+    .project{padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.03);background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));transition:transform .36s var(--ease),box-shadow .36s var(--ease);position:relative;overflow:hidden}
+    .project:hover{transform:translateY(-10px);box-shadow:0 30px 60px rgba(2,6,23,.6)}
+    .project h3{margin:0 0 6px;color:var(--accent-a)}
+    .project p{margin:0;color:var(--muted)}
+    .project .links{display:flex;gap:8px;margin-top:12px}
+    .pill{padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.03);cursor:pointer;min-height:var(--tap-size);touch-action:manipulation}
+
+    /* ======================
+       Dock
+       ====================== */
+    .dock{
+      position:fixed;left:50%;
+      bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);
+      transform:translateX(-50%);
+      display:flex;gap:10px;padding:8px;border-radius:14px;border:1px solid rgba(255,255,255,.03);
+      background:linear-gradient(180deg, rgba(10,12,14,.8), rgba(10,12,14,.5));
+      backdrop-filter:blur(12px); -webkit-backdrop-filter: blur(12px);
+      z-index:110;
+      transition:opacity .2s ease;
+    }
+    .dock-btn{
+      width:56px;height:56px;border-radius:12px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.02);
+      background:rgba(255,255,255,.02);color:var(--muted);font-weight:700;cursor:pointer;transition:transform .18s var(--ease);
+      min-width:var(--tap-size);min-height:var(--tap-size);touch-action:manipulation;
+    }
+    .dock-btn:hover{transform:translateY(-6px);color:#fff;box-shadow:0 12px 36px rgba(0,0,0,.5),0 0 22px rgba(0,255,242,.06) inset}
+    .dock.hide{opacity:0;pointer-events:none}
+
+    /* ======================
+       Palette
+       ====================== */
+    .palette{position:fixed;inset:0;display:none;place-items:center;z-index:160;background:rgba(0,0,0,.5)}
+    .palette.show{display:grid}
+    .palette .panel{width:min(720px,92vw);border-radius:12px;padding:12px;background:linear-gradient(180deg, rgba(10,12,16,.98), rgba(10,12,16,.92));border:1px solid rgba(255,255,255,.03);box-shadow:0 30px 80px rgba(0,0,0,.7)}
+    .palette input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.03);background:#071021;color:#eaf7ff;font-family:var(--mono)}
+    .palette ul{margin-top:8px;list-style:none;padding:0;max-height:40vh;overflow:auto}
+    .palette li{padding:10px;border-radius:8px;cursor:pointer}
+    .palette li:hover{background:rgba(255,255,255,.02)}
+
+    /* ======================
+       OS Windows
+       ====================== */
+    .os-windows{position:fixed;inset:0;pointer-events:none;z-index:140}
+    .window{
+      position:absolute;width:720px;max-width:calc(100% - 24px);min-height:180px;border-radius:12px;overflow:hidden;pointer-events:auto;
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.03);
+      box-shadow:0 30px 80px rgba(0,0,0,.6);
+      touch-action:none; /* required for pointer drag */
+    }
+    .window.max{
+      left:0 !important;
+      top:calc(60px + env(safe-area-inset-top, 0px)) !important;
+      width:100% !important;
+      height:calc(100svh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    }
+    .titlebar{display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));border-bottom:1px solid rgba(255,255,255,.02)}
+    .controls{display:flex;gap:8px}
+    .dot{width:12px;height:12px;border-radius:50%}
+    .dot.red{background:#ff6b6b}
+    .dot.yellow{background:#ffbf69}
+    .dot.green{background:#7bff9a}
+    .content{padding:12px}
+    .term{font-family: 'Orbitron', monospace; background:linear-gradient(180deg,#02111a,#021722); color:#dff6ff;padding:12px;border-radius:10px;min-height:160px;overflow:auto}
+    .term-input{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.03);background:#041826;color:#dff6ff;outline:none}
+    .chat{display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto}
+    .msg{padding:10px 12px;border-radius:12px;max-width:78%}
+    .msg.user{margin-left:auto;background:linear-gradient(90deg, rgba(255,255,255,.03), rgba(255,255,255,.02));color:#e8faff}
+    .msg.ai{margin-right:auto;background:linear-gradient(90deg, rgba(0,255,242,.06), rgba(155,107,255,.04));color:#021016}
+    .thinking{display:inline-flex;gap:6px;padding:6px;border-radius:999px}
+    .dot-s{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.18);animation:throb 900ms infinite}
+    .dot-s:nth-child(2){animation-delay:120ms}.dot-s:nth-child(3){animation-delay:240ms}
+    @keyframes throb{0%,100%{opacity:.2}50%{opacity:1}}
+
+    /* ======================
+       Visualizer canvas
+       ====================== */
+    .viz{border-radius:12px;border:1px solid rgba(255,255,255,.02);background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.01)); image-rendering:auto}
+
+    /* ======================
+       Footer / small helpers
+       ====================== */
+    footer{padding:28px 0;text-align:center;color:var(--muted)}
+    :focus{outline:2px solid rgba(102,224,255,.12);outline-offset:2px}
+    @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+    /* ====== Mobile-friendly header/nav/dock ====== */
+    @media (max-width: 820px) {
+      header { padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px; }
+      .hud { gap: 8px; }
+      .badge { width: 40px; height: 40px; }
+      nav.primary { overflow-x:auto; -webkit-overflow-scrolling:touch; gap:6px; }
+      nav.primary a { padding:8px 10px; white-space:nowrap; }
+      .hud-actions .btn { padding:8px 10px; }
+      main { margin: calc(68px + env(safe-area-inset-top, 0px)) auto 120px; padding: 0 12px; }
+    }
+
+    /* ====== Lower GPU on coarse pointers (phones) ====== */
+    @media (hover:none) and (pointer:coarse) {
+      .section, .project, .dock, header, .palette .panel {
+        box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+      .aurora { filter: blur(60px) saturate(110%); }
+    }
+
+    /* ====== Fallback when backdrop-filter unsupported ====== */
+    @supports not (backdrop-filter: blur(10px)) {
+      header, .dock, .palette .panel, .section {
+        background: rgba(10,12,16,0.9);
+      }
+    }
+  </style>
+</head>
+<body class="theme-aurora">
+  <!-- Background 3D canvas -->
+  <canvas id="bg3d" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- Header HUD -->
+  <header>
+    <div class="hud">
+      <div class="brand">
+        <div class="badge" aria-hidden="true">
+          <img src="HarshBN.jpeg" alt="Harshdeep Herenj"
+               style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />
+        </div>
+        <div>
+          <div style="font-weight:800">BeatsNecker OS</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            Harshdeep Herenj — Music Producer & Aspiring Dev
+          </div>
+        </div>
+      </div>
+
+      <nav class="primary" aria-label="Main navigation">
+        <a data-section="home" class="active">Home</a>
+        <a data-section="about">About</a>
+        <a data-section="contact">Contact</a>
+      </nav>
+
+      <div class="hud-actions">
+        <button class="btn" id="cmdBtn" title="Command palette (⌘/Ctrl + K)">⌘K</button>
+        <button class="btn" id="themeBtn" title="Cycle theme">Theme</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main>
+    <!-- HERO -->
+    <section id="home" class="section hero" aria-labelledby="hero-title">
+      <div>
+        <h1 class="title" id="hero-title">Designing tomorrow's interfaces—today.</h1>
+        <p class="lead">I build immersive, music-reactive web experiences and clean, human-centered systems. I'm a first-year student learning Java, building SchoolOS, and producing Kygo-inspired tracks in FL Studio.</p>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"></div>
+
+        <!-- small system stats mock -->
+        <div style="display:flex;gap:12px;margin-top:18px;flex-wrap:wrap">
+          <div class="plate" style="padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.01),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.02)">
+            <div style="font-weight:700">Now</div>
+            <div style="color:var(--muted);margin-top:6px">Learning Java • Building SchoolOS</div>
+          </div>
+          <div class="plate" style="padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.01),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.02)">
+            <div style="font-weight:700">Now Playing</div>
+            <div style="color:var(--muted);margin-top:6px">Tone • Synth pad</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: hologram + profile -->
+      <div>
+        <style>
+          /* Scoped styles apply only inside this wrapper */
+          .card-wrap{
+            border-radius:12px;
+            padding:12px;
+            border:1px solid rgba(255,255,255,.08);
+            background:
+              radial-gradient(120% 120% at 0% 0%, rgba(168,139,255,0.10), transparent 45%),
+              radial-gradient(120% 120% at 100% 0%, rgba(106,227,255,0.10), transparent 45%),
+              linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+            backdrop-filter: saturate(120%) blur(12px);
+            -webkit-backdrop-filter: saturate(120%) blur(12px);
+          }
+
+          /* Hologram stage: responsive, non-interactive */
+          #holo{
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            min-height: 220px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,.10);
+            background:
+              linear-gradient(180deg, rgba(10,16,28,.35), rgba(10,16,28,.55)),
+              repeating-linear-gradient(180deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px);
+            isolation: isolate;
+          }
+          /* Subtle animated “energy ring” border */
+          #holo::after{
+            content:"";
+            position:absolute;
+            inset:-1px;
+            border-radius: inherit;
+            background: conic-gradient(
+              from 0deg at 50% 50%,
+              rgba(106,227,255,0.18),
+              rgba(168,139,255,0.18),
+              rgba(106,227,255,0.18)
+            );
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+                    mask-composite: exclude;
+            padding: 1px;
+            filter: blur(10px);
+            animation: spin 10s linear infinite;
+            pointer-events: none;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+
+          #holoCanvas{ width:100%; height:100%; display:block; }
+
+          /* Overlay text (non-interactive) */
+          .holo-overlay{
+            position:absolute; inset:0; display:grid; place-items:end center; pointer-events:none;
+            padding: 8px;
+            color:#e8ebf0; font-size:12px; opacity:.7;
+          }
+
+          /* Profile row: stacks on small screens */
+          .row{
+            display:flex; gap:12px; align-items:center; margin-top:12px;
+            flex-wrap: wrap;
+          }
+          @media (max-width: 520px){
+            .row{ flex-direction: column; align-items: flex-start; }
+          }
+
+          /* Avatar sizing (keeps your existing class) */
+          .profile-img{
+            width:64px; height:64px; border-radius:12px; object-fit:cover;
+            background: linear-gradient(135deg, #222a38, #1a2030);
+            border: 1px solid rgba(255,255,255,.08);
+            flex: 0 0 auto;
+          }
+
+          /* Text */
+          .name{ font-weight:800; letter-spacing:.2px; font-size: clamp(18px, 2.6vw, 22px); }
+          .tag{ color: var(--muted, #9aa3b2); margin-top:6px; font-size:13px; }
+
+          /* Chips: keep your classes, enhance for mobile */
+          .chips{ margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
+          .chip{
+            padding:7px 10px; border-radius:999px;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.12);
+            font-size:12px; white-space:nowrap;
+          }
+
+          /* Respect reduced motion preference */
+          @media (prefers-reduced-motion: reduce){
+            #holo::after{ animation: none !important; }
+          }
+        </style>
+
+        <div class="card-wrap">
+          <!-- Hologram container (same id) -->
+          <div id="holo" role="img" aria-label="Holographic visualizer">
+            <canvas id="holoCanvas" aria-hidden="true"></canvas>
+            <div class="holo-overlay">Auto visualizer · motion adapts to settings</div>
+          </div>
+
+          <!-- Profile row (kept your structure/classes/ids) -->
+          <div class="row">
+            <img id="profileImg" class="profile-img" alt="Harshdeep Herenj" src="" />
+            <div>
+              <div class="name">Harshdeep Herenj</div>
+              <div class="tag">Music Producer · Aspiring Full-Stack Developer</div>
+              <div class="chips">
+                <div class="chip">Java</div>
+                <div class="chip">React (learning)</div>
+                <div class="chip">FL Studio</div>
+                <div class="chip">Web Audio</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          // Auto-animated, non-interactive hologram (no touch/tilt)
+          (function(){
+            const canvas = document.getElementById('holoCanvas');
+            const ctx = canvas.getContext('2d', { alpha: true });
+            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            // Mobile perf heuristics (also used later globally)
+            const IS_MOBILE = matchMedia('(hover: none) and (pointer: coarse)').matches;
+            const LOW_POWER = (navigator.deviceMemory && navigator.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+            const CAP_DPR = (IS_MOBILE || LOW_POWER) ? 1.5 : 2;
+
+            // Equalizer bar config
+            const BAR_COUNT = (IS_MOBILE || LOW_POWER) ? 48 : 64;
+            const bars = Array.from({length: BAR_COUNT}, (_, i) => ({
+              phase: Math.random() * Math.PI * 2,
+              speed: 0.6 + Math.random() * 0.6,
+              amp: 0.25 + Math.random() * 0.55
+            }));
+
+            // Floating orbs
+            const ORB_COUNT = (IS_MOBILE || LOW_POWER) ? 7 : 10;
+            const ORBS = Array.from({length: ORB_COUNT}, () => ({
+              r: 0.18 + Math.random() * 0.38,   // radius relative to min(w,h)/2
+              size: 8 + Math.random() * 18,
+              hue: Math.random() < 0.5 ? '106,227,255' : '168,139,255',
+              speed: 0.2 + Math.random() * 0.5,
+              offset: Math.random() * Math.PI * 2
+            }));
+
+            let rafId;
+            function sizeCanvas(){
+              const rect = canvas.getBoundingClientRect();
+              const dpr = Math.min(window.devicePixelRatio || 1, CAP_DPR); // cap DPR for perf
+              const w = Math.floor(rect.width * dpr);
+              const h = Math.floor(rect.height * dpr);
+              if(canvas.width !== w || canvas.height !== h){
+                canvas.width = w; canvas.height = h;
+              }
+              return { w, h, dpr };
+            }
+
+            function draw(t=0){
+              if(!ctx) return;
+              const { w, h } = sizeCanvas();
+              const time = t / 1000;
+
+              // Background gradient
+              const g = ctx.createLinearGradient(0,0,w,h);
+              g.addColorStop(0, '#0f1524'); g.addColorStop(1, '#0a0f1d');
+              ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+              // Soft vignette
+              const vg = ctx.createRadialGradient(w/2,h/2, Math.min(w,h)*0.1, w/2,h/2, Math.max(w,h)*0.7);
+              vg.addColorStop(0, 'rgba(0,0,0,0)');
+              vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+              ctx.fillStyle = vg; ctx.fillRect(0,0,w,h);
+
+              // Orbiting orbs (additive glow)
+              ctx.save();
+              ctx.globalCompositeOperation = 'lighter';
+              const cx = w/2, cy = h/2, R = Math.min(w,h)/2;
+              ORBS.forEach(o=>{
+                const a = time * o.speed + o.offset;
+                const px = cx + Math.cos(a) * o.r * R;
+                const py = cy + Math.sin(a * 1.2) * o.r * R;
+                const grd = ctx.createRadialGradient(px, py, 0, px, py, o.size * 2);
+                grd.addColorStop(0, `rgba(${o.hue},0.55)`);
+                grd.addColorStop(1, `rgba(${o.hue},0.00)`);
+                ctx.fillStyle = grd;
+                ctx.beginPath(); ctx.arc(px, py, o.size * 2, 0, Math.PI*2); ctx.fill();
+              });
+              ctx.restore();
+
+              // Equalizer bars
+              const padX = w * 0.06;
+              const padY = h * 0.18;
+              const usableW = w - padX*2;
+              const usableH = h - padY*2;
+              const gap = 2; // px in canvas coords
+              const bw = (usableW - (BAR_COUNT - 1) * gap) / BAR_COUNT;
+
+              for(let i=0;i<BAR_COUNT;i++){
+                const b = bars[i];
+                const k = i / (BAR_COUNT - 1);
+                // multi-frequency motion for organic feel
+                const m = Math.sin(time * b.speed + b.phase + k * 6.28) * 0.5 + 0.5;
+                const n = Math.sin(time * (b.speed*0.6) + b.phase*1.7 + k * 9.42) * 0.5 + 0.5;
+                const val = Math.pow((m*0.7 + n*0.3), 1.2) * b.amp;
+                const hBar = Math.max(8, usableH * val);
+
+                const x = padX + i * (bw + gap);
+                const y = h - padY - hBar;
+
+                // Gradient per bar
+                const bg = ctx.createLinearGradient(0, y, 0, y + hBar);
+                bg.addColorStop(0, 'rgba(106,227,255,0.85)');
+                bg.addColorStop(1, 'rgba(168,139,255,0.65)');
+                ctx.fillStyle = bg;
+
+                // Glow
+                ctx.shadowColor = 'rgba(106,227,255,0.45)';
+                ctx.shadowBlur = 12;
+
+                // Rounded bar
+                const radius = Math.min(6, bw/2);
+                roundRect(ctx, x, y, bw, hBar, radius);
+                ctx.fill();
+
+                // Reset shadow for next draws
+                ctx.shadowBlur = 0;
+              }
+
+              // Diagonal light sweep
+              ctx.save();
+              ctx.translate(w/2, h/2);
+              ctx.rotate((time * 0.15) % (Math.PI*2));
+              const sweepW = Math.max(w, h) * 0.25;
+              const lg = ctx.createLinearGradient(-sweepW, 0, sweepW, 0);
+              lg.addColorStop(0, 'rgba(255,255,255,0)');
+              lg.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+              lg.addColorStop(1, 'rgba(255,255,255,0)');
+              ctx.fillStyle = lg;
+              ctx.fillRect(-Math.max(w,h), -Math.max(w,h), Math.max(w,h)*2, Math.max(w,h)*2);
+              ctx.restore();
+
+              // Subtle scanlines overlay
+              ctx.globalAlpha = 0.06;
+              ctx.fillStyle = '#ffffff';
+              for(let y=0; y<h; y+=3){ ctx.fillRect(0,y,w,1); }
+              ctx.globalAlpha = 1;
+            }
+
+            function roundRect(ctx, x, y, w, h, r){
+              const rr = Math.min(r, w/2, h/2);
+              ctx.beginPath();
+              ctx.moveTo(x+rr, y);
+              ctx.lineTo(x+w-rr, y);
+              ctx.quadraticCurveTo(x+w, y, x+w, y+rr);
+              ctx.lineTo(x+w, y+h-rr);
+              ctx.quadraticCurveTo(x+w, y+h, x+w-rr, y+h);
+              ctx.lineTo(x+rr, y+h);
+              ctx.quadraticCurveTo(x, y+h, x, y+h-rr);
+              ctx.lineTo(x, y+rr);
+              ctx.quadraticCurveTo(x, y, x+rr, y);
+              ctx.closePath();
+            }
+
+            function loop(t){
+              draw(t || 0);
+              rafId = requestAnimationFrame(loop);
+            }
+
+            function start(){
+              if(prefersReduced) { draw(0); return; }
+              if(!rafId) rafId = requestAnimationFrame(loop);
+            }
+            function stop(){
+              if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
+            }
+
+            // Pause when tab hidden (battery friendly)
+            document.addEventListener('visibilitychange', ()=>{ document.hidden ? stop() : start(); });
+
+            // Handle resize crisply
+            let ro;
+            if('ResizeObserver' in window){
+              ro = new ResizeObserver(()=>draw(performance.now()));
+              ro.observe(canvas);
+            }else{
+              window.addEventListener('resize', ()=>draw(performance.now()));
+            }
+
+            // Kick off
+            start();
+          })();
+        </script>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about" class="section" aria-labelledby="about-title">
+      <h2 id="about-title">About Me ✨</h2>
+      <div style="display:grid;grid-template-columns:1fr 380px;gap:18px;margin-top:12px">
+        <div>
+          <p>I’m Harshdeep—developer in training and music producer. I combine code, sound, and motion to build interfaces that feel alive. I care about readable code, fast performance, and designs that make people smile.</p>
+          <ul style="margin-top:10px;color:var(--muted);line-height:1.6;padding-left:18px">
+            <li>Learning: Java, OOP, REST</li>
+            <li>Music: FL Studio • Tropical / Chill • Melody-first</li>
+            <li>Interests: Accessibility, micro-interactions, system design</li>
+          </ul>
+          <div style="margin-top:12px">
+            <button class="btn" onclick="openWindow('about')">Open About Window</button>
+          </div>
+        </div>
+
+        <div>
+          <div style="padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.03);background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01))">
+            <div style="font-weight:800">Skills</div>
+            <div class="chips" style="margin-top:8px">
+              <div class="chip">HTML</div><div class="chip">CSS</div><div class="chip">JavaScript</div><div class="chip">Java</div>
+            </div>
+
+            <div style="margin-top:12px">
+              <div style="font-weight:700">Roadmap</div>
+              <ol style="margin-top:8px;color:var(--muted)">
+                <li>Finish SchoolOS v1 (Auth, Students, Teachers)</li>
+                <li>Music Lab v2: presets & recording</li>
+                <li>Leetcode DSA Solving</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROJECTS -->
+    <section id="projects" class="section">
+      <h2>Projects 🚀</h2>
+      <p class="muted" style="margin-top:8px">Interactive systems, music experiments, and polished student projects.</p>
+      <div class="projects-grid" style="margin-top:14px">
+        <article class="project" aria-labelledby="proj-aurora">
+          <h3 id="proj-aurora">BN Portfolio OS</h3>
+          <p class="muted">A windowed, keyboard-friendly OS portfolio with music-reactive backgrounds and desktop-like interactions.</p>
+          <div class="links" style="margin-top:10px">
+            <a class="pill" href="#" onclick="toast('Live demo coming — this is a local preview')">Live</a>
+          </div>
+        </article>
+
+        <article class="project" aria-labelledby="proj-music">
+          <h3 id="proj-music">Tropix — Music Lab</h3>
+          <p class="muted">Kygo-inspired loops & stems with live visualization. Built as a web-first music lab with recording presets.</p>
+          <div class="links" style="margin-top:10px"></div>
+        </article>
+
+        <article class="project" aria-labelledby="proj-school">
+          <h3 id="proj-school">SchoolOS (WIP)</h3>
+          <p class="muted">Modular Java-based system for students, teachers, and schedules. Focused on clean architecture and fast search.</p>
+          <div class="links" style="margin-top:10px"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- MUSIC -->
+    <section id="music" class="section">
+      <h2>Music Lab 🎛️</h2>
+
+      <div style="margin-top:12px;display:grid;gap:15px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;color:var(--muted)">
+            <input type="checkbox" id="reducedMotion"> Reduced Motion
+          </label>
+        </div>
+
+        <div class="credit-bar">
+          One of the Music by <span>BeatsNecker</span>
+        </div>
+
+        <style>
+          :root{
+            --bar-h: 60px;
+            --radius: 12px;
+            --anim-secs: 4s;
+
+            --text-main: rgba(255,255,255,0.85);
+            --text-accent: #55d8f0;
+
+            --inner-fade: rgba(0,0,0,0.22);
+            --side-fade: rgba(0,0,0,0.22);
+          }
+
+          .credit-bar{
+            width: 100%;
+            height: var(--bar-h);
+            border-radius: var(--radius);
+
+            background: linear-gradient(90deg, #444241, #c66b97, #a19b98);
+            background-size: 200% 100%;
+            animation: gradientShift var(--anim-secs) ease-in-out infinite;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            color: var(--text-main);
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+
+            box-shadow:
+              inset 0 0 28px var(--inner-fade),
+              0 6px 18px rgba(0,0,0,0.22);
+            position: relative;
+            overflow: hidden;
+          }
+          .credit-bar span{
+            color: var(--text-accent);
+            margin-left: 6px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+          }
+          .credit-bar::before,
+          .credit-bar::after{
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 90px;
+            pointer-events: none;
+            background: linear-gradient(to right, var(--side-fade), transparent);
+          }
+          .credit-bar::before{ left: 0; }
+          .credit-bar::after{
+            right: 0;
+            transform: scaleX(-1);
+          }
+          @keyframes gradientShift{
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          @media (prefers-reduced-motion: reduce){
+            .credit-bar{ animation: none; }
+          }
+        </style>
+
+        <!-- Mobile compliant audio: muted + playsinline, JS un-mutes on tap -->
+        <audio id="audio" muted playsinline preload="metadata" loop controls style="width:100%;border-radius:8px">
+          <source src="untitled.mp3" type="audio/mpeg">
+        </audio>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section id="contact" class="section">
+      <h2 class="section-title"
+          style="
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: clamp(1.5rem, 1.1rem + 1vw, 2rem);
+            background: linear-gradient(90deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 0.2px;
+          ">
+        Contact
+        <span class="wave" style="display:inline-block;transform-origin:70% 70%">🤝</span>
+      </h2>
+
+      <p class="muted"
+          style="margin-top:8px;color:#64748b;max-width:65ch">
+        Open to collaborations in music and student-friendly dev projects. I read every message.
+      </p>
+
+      <div class="btn-row"
+          style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+
+        <!-- Email Button -->
+        <a id="emailBtn" class="btn btn-email"
+          href="mailto:harshdeepherenj006@gmail.com"
+          aria-label="Send me an email"
+          style="
+            position:relative;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;
+            border-radius:999px;border:1px solid rgba(148,163,184,0.35);text-decoration:none;font-weight:600;
+            line-height:1;transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease,color .2s ease;
+            background:hsl(220 25% 96%);color:#0f172a;">
+          <span class="icon" style="font-size:1.05em">✉️</span>
+          <span class="btnText">Email</span>
+        </a>
+
+        <!-- GitHub Button -->
+        <a id="githubBtn" class="btn btn-github"
+          href="https://github.com/harshdeep-herenj"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Visit my GitHub"
+          style="
+            position:relative;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;
+            border-radius:999px;border:1px solid rgba(148,163,184,0.35);text-decoration:none;font-weight:600;
+            line-height:1;transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease,color .2s ease;
+            background:hsl(220 25% 96%);color:#0f172a;">
+          <span class="icon" style="font-size:1.05em">🐙</span>
+          <span class="btnText">GitHub</span>
+        </a>
+
+        <!-- LinkedIn Button -->
+        <a id="linkedinBtn" class="btn btn-linkedin"
+          href="https://www.linkedin.com/in/harshdeep-herenj-0066252ab"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Visit my LinkedIn"
+          style="
+            position:relative;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;
+            border-radius:999px;border:1px solid rgba(148,163,184,0.35);text-decoration:none;font-weight:600;
+            line-height:1;transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease,color .2s ease;
+            background:hsl(220 25% 96%);color:#0f172a;">
+          <span class="icon" style="font-size:1.05em">🔗</span>
+          <span class="btnText">LinkedIn</span>
+        </a>
+      </div>
+
+      <style>
+        #contact {
+          margin-top: 16px;
+          padding: 24px;
+          border-radius: 16px;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(236, 72, 153, 0.08));
+          box-shadow: 0 6px 24px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
+        }
+
+        @keyframes wave {
+          0%, 60%, 100% { transform: rotate(0deg); }
+          10% { transform: rotate(14deg); }
+          20% { transform: rotate(-8deg); }
+          30% { transform: rotate(14deg); }
+          40% { transform: rotate(-4deg); }
+          50% { transform: rotate(10deg); }
+        }
+        #contact .wave { animation: wave 2s ease-in-out infinite; }
+
+        #contact .btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 22px rgba(2, 6, 23, 0.12);
+          border-color: transparent;
+        }
+        #contact .btn:active { transform: translateY(0); }
+        #contact .btn:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+
+        #contact .btn-email:hover { box-shadow: 0 10px 24px rgba(99,102,241,0.25); }
+        #contact .btn-github:hover { box-shadow: 0 10px 24px rgba(2,6,23,0.18); }
+        #contact .btn-linkedin:hover { box-shadow: 0 10px 24px rgba(10,102,194,0.25); }
+
+        @media (prefers-color-scheme: dark) {
+          #contact .muted { color:#94a3b8!important; }
+          #contact .btn { background:rgba(255,255,255,0.06)!important; color:#e2e8f0!important; border-color:rgba(148,163,184,0.35)!important; }
+          #contact .btn:hover { box-shadow:0 8px 22px rgba(0,0,0,0.35); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #contact .wave, #contact .btn { animation:none; transition:none; }
+        }
+      </style>
+
+      <script>
+        const buttons = [
+          { id: 'emailBtn', text: 'Email', reveal: 'harshdeepherenj006@gmail.com' },
+          { id: 'githubBtn', text: 'GitHub', reveal: 'github.com/harshdeep-herenj' },
+          { id: 'linkedinBtn', text: 'LinkedIn', reveal: 'linkedin.com/in/harshdeep-herenj' }
+        ];
+
+        let expandedBtn = null;
+
+        buttons.forEach(btnInfo => {
+          const btn = document.getElementById(btnInfo.id);
+          const textEl = btn.querySelector('.btnText');
+
+          btn.addEventListener('click', function (e) {
+            if (expandedBtn === btn) {
+              return; // allow default behavior (mailto / open link)
+            }
+            e.preventDefault();
+            textEl.textContent = btnInfo.reveal;
+            expandedBtn = btn;
+          });
+        });
+
+        // Collapse when clicking outside
+        document.addEventListener('click', function (e) {
+          if (expandedBtn && !expandedBtn.contains(e.target)) {
+            const info = buttons.find(b => b.id === expandedBtn.id);
+            expandedBtn.querySelector('.btnText').textContent = info.text;
+            expandedBtn = null;
+          }
+        });
+      </script>
+    </section>
+
+  </main>
+
+  <!-- OS windows container -->
+  <div class="os-windows" id="osWindows" aria-hidden="false"></div>
+
+  <!-- Command palette -->
+  <div class="palette" id="palette" aria-hidden="true">
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-weight:700">Command Palette</div>
+        <div style="color:var(--muted);font-size:13px">⌘/Ctrl+K • ESC to close</div>
+      </div>
+      <input id="paletteInput" placeholder="Type command — go projects, theme solstice, play demo, open assistant" aria-label="Command input"/>
+      <ul id="paletteResults"></ul>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toasts" aria-live="polite" style="position:fixed;right:18px;bottom:120px;z-index:220;display:flex;flex-direction:column;gap:8px"></div>
+
+  <!-- Footer -->
+  <footer>© 2025 Harshdeep Herenj — BeatsNecker OS &#10084</footer>
+
+  <script>
+    /* ============================================================
+       Mobile perf heuristics (global)
+       ============================================================ */
+    const IS_MOBILE = matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const LOW_POWER = (navigator.deviceMemory && navigator.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    const CAP_DPR = (IS_MOBILE || LOW_POWER) ? 1.5 : 2;
+
+    /* ============================================================
+     Utilities & tiny UI helpers
+     ============================================================ */
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
+    const toastRoot = $('#toasts');
+    const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function toast(msg, ms=1600){
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = 'background:rgba(6,8,12,.94);color:#e6ffff;padding:10px 14px;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.6)';
+      toastRoot.appendChild(el);
+      setTimeout(()=>{ el.style.transition='opacity 220ms'; el.style.opacity=0; setTimeout(()=>el.remove(),220); }, ms);
+    }
+
+    // Smooth scroll helper
+    function scrollToSection(id){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.scrollIntoView({behavior: prefersReduced ? 'auto' : 'smooth', block:'start'});
+    }
+
+    // Hook nav links
+    $$('.primary a').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const s = a.dataset.section;
+        scrollToSection(s);
+      });
+    });
+
+    // Nav highlight based on intersection
+    (function navObserver(){
+      const sections = $$('main section[id]');
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(en => {
+          if(en.isIntersecting){
+            const id = en.target.id;
+            $$('.primary a').forEach(a => a.classList.toggle('active', a.dataset.section === id));
+          }
+        });
+      }, { threshold: 0.36, rootMargin: '-20% 0% -40% 0%' });
+      sections.forEach(s => io.observe(s));
+    })();
+
+    /* ============================================================
+     Command palette: fuzzy-search commands and run them
+     ============================================================ */
+    const palette = $('#palette');
+    const paletteInput = $('#paletteInput');
+    const paletteResults = $('#paletteResults');
+
+    const COMMANDS = [
+      {id:'go-home', label:'Go: Home', run: () => scrollToSection('home')},
+      {id:'go-about', label:'Go: About', run: () => scrollToSection('about')},
+      {id:'go-projects', label:'Go: Projects', run: () => scrollToSection('projects')},
+      {id:'go-music', label:'Go: Music Lab', run: () => scrollToSection('music')},
+      {id:'open-terminal', label:'Open: Terminal', run: () => openWindow('terminal')},
+      {id:'open-chat', label:'Open: Assistant', run: () => openWindow('chat')},
+      {id:'theme-aurora', label:'Theme: Aurora', run: () => applyTheme('theme-aurora')},
+      {id:'theme-solstice', label:'Theme: Solstice', run: () => applyTheme('theme-solstice')},
+      {id:'theme-mint', label:'Theme: Mint', run: () => applyTheme('theme-mint')},
+      {id:'play-demo', label:'Play: Demo Tone', run: () => playTinyTone()},
+      {id:'spawn', label:'Spawn: Particles Center', run: () => spawnParticlesAtCenter()}
+    ];
+
+    function renderPalette(list){
+      paletteResults.innerHTML = '';
+      list.forEach(c => {
+        const li = document.createElement('li');
+        li.textContent = c.label;
+        li.tabIndex = 0;
+        li.style.padding = '10px';
+        li.style.borderRadius = '8px';
+        li.addEventListener('click', () => { c.run(); closePalette(); });
+        li.addEventListener('keydown', e => { if(e.key==='Enter'){ c.run(); closePalette(); }});
+        paletteResults.appendChild(li);
+      });
+    }
+
+    function openPalette(){
+      palette.classList.add('show'); palette.setAttribute('aria-hidden','false'); paletteInput.value=''; renderPalette(COMMANDS); setTimeout(()=>paletteInput.focus(),20);
+    }
+    function closePalette(){ palette.classList.remove('show'); palette.setAttribute('aria-hidden','true'); }
+
+    $('#cmdBtn').addEventListener('click', openPalette);
+
+    paletteInput.addEventListener('input', ()=>{
+      const q = paletteInput.value.trim().toLowerCase();
+      const filtered = COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.id.includes(q));
+      renderPalette(filtered);
+    });
+
+    addEventListener('keydown', e => {
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'){ e.preventDefault(); if(palette.classList.contains('show')) closePalette(); else openPalette(); }
+      if(e.key === 'Escape'){ if(palette.classList.contains('show')) closePalette(); }
+    });
+
+    /* ============================================================
+     Themes persisted & cycling
+     ============================================================ */
+    const THEMES = ['theme-aurora','theme-solstice','theme-mint'];
+    function getTheme(){ return localStorage.getItem('bn_theme') || 'theme-aurora' }
+    function applyTheme(t){ document.body.classList.remove(...THEMES); document.body.classList.add(t); localStorage.setItem('bn_theme', t); }
+    applyTheme(getTheme());
+    $('#themeBtn').addEventListener('click', ()=>{
+      const cur = getTheme(); const idx = (THEMES.indexOf(cur) + 1) % THEMES.length; applyTheme(THEMES[idx]); toast('Theme: ' + THEMES[idx].replace('theme-',''));
+    });
+
+    /* ============================================================
+     Background 3D hologram & starfield via Three.js
+     ============================================================ */
+    (function threeScene(){
+      const container = document.getElementById('holo');
+      container.style.background = '#06080b';
+
+      // Background renderer (full page)
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, canvas: document.getElementById('bg3d') });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, CAP_DPR));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      // Scene + camera for background (stars)
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 2.2);
+
+      // Create separate small renderer for hologram plane inside container (overlay)
+      const holoCanvas = document.createElement('canvas');
+      holoCanvas.style.width = '100%';
+      holoCanvas.style.height = '100%';
+      holoCanvas.style.display = 'block';
+      container.appendChild(holoCanvas);
+      const holoR = new THREE.WebGLRenderer({ canvas: holoCanvas, alpha:true, antialias:true });
+      holoR.setPixelRatio(Math.min(window.devicePixelRatio || 1, CAP_DPR));
+      holoR.setSize(container.clientWidth, container.clientHeight);
+
+      // holo scene
+      const holoScene = new THREE.Scene();
+      const holoCamera = new THREE.PerspectiveCamera(40, container.clientWidth/container.clientHeight, 0.1, 1000);
+      holoCamera.position.set(0, 0, 2);
+
+      // lighting
+      const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+      dir.position.set(5,5,5); holoScene.add(dir);
+      const amb = new THREE.AmbientLight(0xffffff, 0.3); holoScene.add(amb);
+
+      // load profile image robustly (tries several names)
+      const profileImgEl = document.getElementById('profileImg');
+      const CANDIDATES = ['Harshdeep.jpg','harshdeep.jpg','./Harshdeep.jpg','./images/Harshdeep.jpg','./img/Harshdeep.jpg'];
+      (async function loadProfileAndTexture(){
+        let url = null;
+        for(const p of CANDIDATES){
+          try {
+            await new Promise((res,rej)=>{
+              const img = new Image();
+              img.onload = ()=>res(true);
+              img.onerror = ()=>rej(false);
+              img.src = p + (p.includes('?') ? '' : '?v='+(Date.now()));
+            });
+            url = CANDIDATES.find(x => x === p);
+            break;
+          } catch(e){}
+        }
+        if(url){
+          profileImgEl.src = url;
+        } else {
+          profileImgEl.src = '';
+          profileImgEl.alt = 'Portrait (not found)';
+        }
+        // Build hologram texture from profile or fallback shader
+        const loader = new THREE.TextureLoader();
+        let tex;
+        try {
+          tex = await new Promise((res, rej)=> loader.load(profileImgEl.src || '', res, undefined, ()=>rej()));
+        } catch(e){
+          // fallback: gradient
+          const cvs = document.createElement('canvas'); cvs.width = 1024; cvs.height = 1024; const ctx = cvs.getContext('2d');
+          const g = ctx.createLinearGradient(0,0,1024,1024); g.addColorStop(0,'#66e0ff'); g.addColorStop(1,'#9b6bff'); ctx.fillStyle=g; ctx.fillRect(0,0,1024,1024);
+          tex = new THREE.CanvasTexture(cvs);
+        }
+
+        // plane with holographic shader-like material
+        const planeGeo = new THREE.PlaneGeometry(1.1, 1.3, 32, 32);
+        const mat = new THREE.MeshStandardMaterial({
+          map: tex,
+          transparent: true,
+          metalness: 0.2,
+          roughness: 0.4,
+          emissive: new THREE.Color(0x003344).multiplyScalar(0.2)
+        });
+        const plane = new THREE.Mesh(planeGeo, mat);
+        plane.position.set(0,0,0);
+        holoScene.add(plane);
+
+        // subtle chromatic post effect (simple multiple planes)
+        const shimmer = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff, blending: THREE.AdditiveBlending, opacity: 0.12, transparent:true }));
+        shimmer.scale.set(1.02,1.02,1.02);
+        shimmer.position.set(0.006,0.006,-0.01);
+        holoScene.add(shimmer);
+
+        // particle aura
+        const partGeo = new THREE.BufferGeometry();
+        const count = (IS_MOBILE || LOW_POWER) ? 400 : 600;
+        const positions = new Float32Array(count*3);
+        for(let i=0;i<count;i++){
+          positions[i*3 + 0] = (Math.random()-0.5) * 1.8;
+          positions[i*3 + 1] = (Math.random()-0.5) * 2.4;
+          positions[i*3 + 2] = (Math.random()-0.5) * 0.6 - 0.6;
+        }
+        partGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const pMat = new THREE.PointsMaterial({ size: 0.008, color: 0x66e0ff, transparent:true, opacity:0.6 });
+        const parts = new THREE.Points(partGeo, pMat);
+        holoScene.add(parts);
+
+        // interactive orbit-like subtle movement
+        let t = 0;
+        function holoLoop(){
+          t += 0.006;
+          plane.rotation.y = Math.sin(t*0.6) * 0.06;
+          plane.rotation.x = Math.sin(t*0.35) * 0.03;
+          shimmer.rotation.y = plane.rotation.y * 1.1;
+          parts.rotation.y = t * 0.02;
+          holoR.render(holoScene, holoCamera);
+          requestAnimationFrame(holoLoop);
+        }
+        holoLoop();
+      })();
+
+      /* Starfield big canvas (full page) */
+      const starMaterial = new THREE.PointsMaterial({ color:0xffffff, size:0.8, transparent:true, opacity:0.9 });
+      const starGeo = new THREE.BufferGeometry();
+      const STAR_COUNT = (IS_MOBILE || LOW_POWER) ? 300 : 1000;
+      const stars = new Float32Array(STAR_COUNT * 3);
+      for(let i=0;i<STAR_COUNT;i++){
+        stars[i*3+0] = (Math.random()-0.5) * 200;
+        stars[i*3+1] = (Math.random()-0.5) * 200;
+        stars[i*3+2] = -Math.random()*300;
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(stars, 3));
+      const starPoints = new THREE.Points(starGeo, starMaterial);
+      scene.add(starPoints);
+
+      let bgRAF = null;
+      // Render loop (bg renderer)
+      function bgLoop(){
+        // move stars slowly
+        const positions = starGeo.attributes.position.array;
+        for(let i=0;i<positions.length/3;i++){
+          positions[i*3+2] += 0.12;
+          if(positions[i*3+2] > 20){
+            positions[i*3+2] = -300 - Math.random()*80;
+          }
+        }
+        starGeo.attributes.position.needsUpdate = true;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.render(scene, camera);
+        bgRAF = requestAnimationFrame(bgLoop);
+      }
+      bgLoop();
+
+      // Pause background renderer when hidden (battery-friendly)
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { if (bgRAF) { cancelAnimationFrame(bgRAF); bgRAF = null; } }
+        else if (!bgRAF) { bgLoop(); }
+      });
+
+      // Resize handling for both renderers
+      function onResize(){
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        holoR.setSize(container.clientWidth, container.clientHeight);
+        holoCamera.aspect = container.clientWidth / container.clientHeight;
+        holoCamera.updateProjectionMatrix();
+      }
+      addEventListener('resize', onResize);
+
+    })();
+
+    /* ============================================================
+     OS Windows system: create draggable, focusable windows
+     ============================================================ */
+    const os = document.getElementById('osWindows');
+    let z = 400;
+    const openWindows = {};
+
+    function openWindow(type){
+      if(openWindows[type]){ focusWindow(openWindows[type]); return; }
+      const win = document.createElement('div');
+      win.className = 'window';
+      win.style.left = (20 + Math.random()*40) + 'px';
+      win.style.top = (calcTopForWindow()) + 'px';
+      win.style.zIndex = ++z;
+      win.innerHTML = windowTemplate(type);
+      os.appendChild(win);
+      openWindows[type] = win;
+      makeDraggable(win);
+      focusWindow(win);
+      // Initialize content
+      if(type === 'terminal') initTerminal(win);
+      if(type === 'chat') initChat(win);
+      if(type === 'music') initMiniMusic(win);
+      if(type === 'about') initAbout?.(win);
+    }
+
+    function calcTopForWindow(){
+      // Keep initial top under header area, respecting safe area
+      const base = 80;
+      const safeTop = 60;
+      return Math.max(base, safeTop + (IS_MOBILE ? 20 : 0));
+    }
+
+    function windowTemplate(type){
+      const titleMap = { terminal:'Terminal', chat:'Quantum Assistant', music:'Music Lab', about:'About Harshdeep' };
+      const title = titleMap[type] || 'Window';
+      return `
+        <div class="titlebar">
+          <div class="controls"><span class="dot red" title="Close"></span><span class="dot yellow" title="Minimize"></span><span class="dot green" title="Maximize"></span></div>
+          <div style="flex:1;text-align:center;font-weight:700">${title}</div>
+          <div style="width:40px"></div>
+        </div>
+        <div class="content">
+          ${type==='terminal' ? `<div class="term"><div id="termOut"></div><div style="margin-top:8px"><input id="termIn" class="term-input" placeholder="Type command (help) and press Enter"></div></div>` : ''}
+          ${type==='chat' ? `<div><div class="chat" id="chatBox"><div class="msg ai">Hello — I'm your local assistant. Ask me anything about this portfolio.</div></div><div style="display:flex;gap:8px;margin-top:8px"><input id="chatText" placeholder="Ask..." style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.03)"><button id="sendChat" class="btn">Send</button></div></div>` : ''}
+          ${type==='music' ? `<div><canvas id="miniViz" class="viz" style="height:160px"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button id="miniPlay" class="btn">Play/Pause</button><select id="miniMode" class="btn"><option>bars</option><option>particles</option><option>ribbon</option></select></div></div>` : ''}
+          ${type==='about' ? `<div style="display:flex;gap:12px;align-items:center"><img src="${document.getElementById('profileImg').src || ''}" alt="Harshdeep" style="width:120px;height:120px;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,.04)"><div><div style="font-weight:800">Harshdeep Herenj</div><div style="color:var(--muted);margin-top:6px">Music Producer & Aspiring Full-stack Developer</div><div style="margin-top:8px"><a href="mailto:harshdeepherenj007@gmail.com" style="color:var(--accent-a)">Email</a> • <a href="https://github.com/harshdeep-herenj" target="_blank" style="color:var(--accent-a)">GitHub</a></div></div></div>` : ''}
+        </div>
+      `;
+    }
+
+    function focusWindow(win){
+      win.style.zIndex = ++z;
+    }
+
+    function closeWindow(type){
+      const win = openWindows[type];
+      if(!win) return;
+      win.remove();
+      delete openWindows[type];
+    }
+
+    // Touch-first drag with Pointer Events + viewport clamping
+    function makeDraggable(win){
+      const titlebar = win.querySelector('.titlebar');
+      let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+
+      const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+
+      const onDown = (e) => {
+        if (e.target.classList.contains('dot')) return;
+        dragging = true;
+        win.style.transition = 'none';
+        sx = e.clientX; sy = e.clientY;
+        const rect = win.getBoundingClientRect();
+        ox = rect.left; oy = rect.top;
+        win.setPointerCapture?.(e.pointerId);
+        focusWindow(win);
+        document.body.style.userSelect = 'none';
+      };
+
+      const onMove = (e) => {
+        if (!dragging) return;
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const rect = win.getBoundingClientRect();
+        const newLeft = ox + (e.clientX - sx);
+        const newTop  = oy + (e.clientY - sy);
+        const maxLeft = W - rect.width - 8;
+        const maxTop  = H - rect.height - 8;
+        win.style.left = clamp(newLeft, 8, Math.max(8, maxLeft)) + 'px';
+        win.style.top  = clamp(newTop,  60, Math.max(60,  maxTop)) + 'px';
+      };
+
+      const onUp = (e) => {
+        dragging = false;
+        win.releasePointerCapture?.(e.pointerId);
+        win.style.transition = '';
+        document.body.style.userSelect = '';
+      };
+
+      titlebar.addEventListener('pointerdown', onDown);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+
+      // controls
+      win.querySelectorAll('.controls .dot').forEach(dot=>{
+        dot.addEventListener('click', ()=>{
+          if(dot.classList.contains('red')){
+            win.remove();
+            for(const k in openWindows){ if(openWindows[k] === win) delete openWindows[k]; }
+          }
+          if(dot.classList.contains('yellow')){
+            win.style.display = 'none'; setTimeout(()=>{ win.style.display='block'; }, 8000);
+          }
+          if(dot.classList.contains('green')){
+            if(!win.classList.contains('max')){
+              win.classList.add('max');
+              win.dataset.prevLeft = win.style.left;
+              win.dataset.prevTop = win.style.top;
+              win.dataset.prevWidth = win.style.width;
+              win.style.left = '0px';
+              win.style.top = 'calc(60px + env(safe-area-inset-top, 0px))';
+              win.style.width = '100%';
+              win.style.height = 'calc(100svh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))';
+            } else {
+              win.classList.remove('max');
+              win.style.left  = win.dataset.prevLeft || '20px';
+              win.style.top   = win.dataset.prevTop  || '70px';
+              win.style.width = win.dataset.prevWidth || '720px';
+              win.style.height = '';
+            }
+          }
+        });
+      });
+    }
+
+    // Expose openWindow for inline buttons
+    window.openWindow = openWindow;
+
+    // Hook dock buttons (if present in your DOM elsewhere)
+    $$('.dock-btn').forEach(btn => btn.addEventListener('click', ()=>{
+      const action = btn.dataset.action;
+      if(action === 'home') scrollToSection('home');
+      if(action === 'projects') scrollToSection('projects');
+      if(action === 'music') openWindow('music');
+      if(action === 'chat') openWindow('chat');
+      if(action === 'terminal') openWindow('terminal');
+    }));
+
+    // Header controls safeguard (in case not present)
+    const headerTermBtn = $('#openTerminalBtn');
+    if (headerTermBtn) headerTermBtn.addEventListener('click', () => openWindow('terminal'));
+
+    /* ============================================================
+     Terminal implementation (in-window)
+     ============================================================ */
+    function initTerminal(win){
+      const out = win.querySelector('#termOut');
+      const input = win.querySelector('#termIn');
+      function write(text){ const d = document.createElement('div'); d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; }
+      write('BeatsNecker Terminal — type "help" for commands');
+      input.focus();
+      input.addEventListener('keydown', e => {
+        if(e.key==='Enter'){ const val = input.value.trim(); input.value=''; write('> ' + val); handleTerminal(val, write); }
+      });
+    }
+
+    function handleTerminal(cmd, write){
+      if(!cmd) return;
+      const parts = cmd.split(' ');
+      const c = parts[0].toLowerCase();
+      if(c === 'help') write('Commands: help, about, play, spawn, clear, open [chat|music|about]');
+      else if(c === 'about') write('Harshdeep Herenj — music producer and aspiring full-stack developer.');
+      else if(c === 'play'){ playTinyTone(); write('Played demo tone.'); }
+      else if(c === 'spawn'){ spawnParticlesAtCenter(); write('Spawned particles.'); }
+      else if(c === 'clear'){ const out = document.querySelector('#termOut'); if(out) out.innerHTML = ''; }
+      else if(c === 'open'){ const target = parts[1]; if(target) openWindow(target); write('Opening: ' + target); }
+      else write('Unknown command: ' + c);
+    }
+
+    /* ============================================================
+     Chat assistant: simulated "AI" responses with typing effect
+     ============================================================ */
+    function initChat(win){
+      const box = win.querySelector('#chatBox');
+      const input = win.querySelector('#chatText');
+      const send = win.querySelector('#sendChat');
+      function pushUser(text){
+        const el = document.createElement('div'); el.className = 'msg user'; el.textContent = text; box.appendChild(el); box.scrollTop = box.scrollHeight;
+      }
+      function pushAI(text){
+        const el = document.createElement('div'); el.className = 'msg ai'; box.appendChild(el);
+        let i = 0;
+        const step = ()=>{ el.textContent = text.slice(0,i); i++; if(i<=text.length) setTimeout(step, 12 + Math.random()*16); else box.scrollTop = box.scrollHeight; };
+        step();
+      }
+      function pushThinking(){
+        const el = document.createElement('div'); el.className='msg ai'; const t = document.createElement('span'); t.className='thinking'; t.innerHTML = '<span class="dot-s"></span><span class="dot-s"></span><span class="dot-s"></span>'; el.appendChild(t); box.appendChild(el); box.scrollTop = box.scrollHeight; return el;
+      }
+      send.addEventListener('click', async ()=>{
+        const q = input.value.trim(); if(!q) return; input.value=''; pushUser(q);
+        const th = pushThinking();
+        await new Promise(r => setTimeout(r, 600 + Math.random()*900));
+        th.remove();
+        const l = q.toLowerCase();
+        if(l.includes('projects')) pushAI('I can show Aurora Portfolio OS, Music Lab (Tropix), and SchoolOS. Want links or a quick summary?');
+        else if(l.includes('music')) pushAI('I produce chill/tropical tracks using FL Studio. Open the Music Lab to visualize audio in real time.');
+        else if(l.includes('how') && l.includes('start')) pushAI('Start with small projects: wireframe, build UI components, add an audio visualizer later. I can create a step-by-step checklist.');
+        else pushAI('Nice question! I am a local assistant demo — I can open windows, play demo tones, or show project links. Try "open music" or "play demo".');
+      });
+      input.addEventListener('keydown', e => { if(e.key==='Enter') send.click(); });
+    }
+
+    /* ============================================================
+     Music Visualizer: WebAudio + Canvas
+     ============================================================ */
+    const audioEl = document.getElementById('audio');
+    const vizCanvas = document.getElementById('vizCanvas') || (function(){
+      // If your main viz canvas isn't in DOM, create an offscreen reference to avoid errors.
+      const dummy = document.createElement('canvas'); dummy.id='vizCanvasHidden'; dummy.width=0; dummy.height=0; return dummy;
+    })();
+    const vizCtx = vizCanvas.getContext('2d');
+    let audioCtx, analyser, dataArray, rafId;
+
+    function initAudio(){
+      if(audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      try{
+        const src = audioCtx.createMediaElementSource(audioEl);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        src.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+      }catch(e){ console.warn(e); }
+    }
+
+    function resizeViz(){
+      if(!vizCanvas || !vizCtx) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, CAP_DPR);
+      vizCanvas.width = Math.floor(vizCanvas.clientWidth * dpr);
+      vizCanvas.height = Math.floor(vizCanvas.clientHeight * dpr);
+      vizCtx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    addEventListener('resize', resizeViz);
+    resizeViz();
+
+    function vizLoop(){
+      if(!analyser || !vizCtx || !vizCanvas) return;
+      analyser.getByteFrequencyData(dataArray);
+      const modeSelect = $('#vizMode');
+      const mode =
+      (modeSelect ? modeSelect.value : 'bars');
+
+      const w = vizCanvas.clientWidth, h = vizCanvas.clientHeight;
+      vizCtx.clearRect(0,0,w,h);
+
+      if (mode === 'bars') {
+        const bars = (IS_MOBILE || LOW_POWER) ? 40 : 64;
+        const bw = w / bars;
+        for (let i = 0; i < bars; i++) {
+          const idx = Math.floor((i / bars) * dataArray.length);
+          const v = dataArray[idx] / 255;
+          const heightVal = v * h * 0.9;
+          const grad = vizCtx.createLinearGradient(0,0,w,0);
+          grad.addColorStop(0, getComputedStyle(document.body).getPropertyValue('--accent-a') || '#66e0ff');
+          grad.addColorStop(1, getComputedStyle(document.body).getPropertyValue('--accent-b') || '#9b6bff');
+          vizCtx.fillStyle = grad;
+          vizCtx.fillRect(i * bw, h - heightVal, bw * 0.7, heightVal);
+        }
+      } else if (mode === 'particles') {
+        const avg = dataArray.reduce((a,b)=>a+b,0)/(dataArray.length*255);
+        const count = (IS_MOBILE || LOW_POWER) ? 80 : 120;
+        for (let i = 0; i < count; i++) {
+          const x = (i * 37.7 + performance.now()*0.02) % w;
+          const y = (Math.sin((i*13.4 + performance.now()*0.003)) * 0.5 + 0.5) * h;
+          vizCtx.beginPath();
+          vizCtx.fillStyle = `rgba(102,224,255,${0.18 + avg*0.6})`;
+          vizCtx.arc(x, y, 1.5 + avg*6, 0, Math.PI*2);
+          vizCtx.fill();
+        }
+      } else if (mode === 'ribbon') {
+        const t = performance.now() * 0.002;
+        vizCtx.lineWidth = 2;
+        vizCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--accent-a') || '#66e0ff';
+        vizCtx.beginPath();
+        for (let x = 0; x < w; x += 6) {
+          const idx = Math.floor((x / w) * dataArray.length);
+          const energy = (dataArray[idx] || 0) / 255;
+          const y = (h/2) + Math.sin((x/80) + t) * (20 + energy*80);
+          if (x === 0) vizCtx.moveTo(x, y); else vizCtx.lineTo(x, y);
+        }
+        vizCtx.stroke();
+      }
+      rafId = requestAnimationFrame(vizLoop);
+    }
+
+    const startBtn = $('#startVizBtn');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        if(!audioEl.src){ toast('No audio loaded — drop an audio file or play the demo tone'); return; }
+        initAudio(); if(audioCtx.state === 'suspended') audioCtx.resume();
+        if(rafId) cancelAnimationFrame(rafId);
+        vizLoop();
+      });
+    }
+
+    // Drop audio onto music section
+    (function attachDrop(){
+      const music = document.getElementById('music');
+      if (!music) return;
+      music.addEventListener('dragover', e=> e.preventDefault());
+      music.addEventListener('drop', e=>{
+        e.preventDefault();
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(f && f.type.startsWith('audio/')){
+          audioEl.src = URL.createObjectURL(f);
+          audioEl.play().catch(()=>{});
+          initAudio();
+          vizLoop();
+          toast('Loaded audio: ' + f.name);
+        } else toast('Drop an audio file (.mp3, .wav) here');
+      });
+    })();
+
+    // file input (optional)
+    const fileInput = $('#audioFile');
+    if (fileInput) {
+      fileInput.addEventListener('change', e=>{
+        const f = e.target.files && e.target.files[0];
+        if(!f) return;
+        audioEl.src = URL.createObjectURL(f);
+        audioEl.play().catch(()=>{});
+        initAudio(); vizLoop();
+        toast('Loaded: ' + f.name);
+      });
+    }
+
+    // play tiny synth tone
+    function playTinyTone(){
+      try{
+        const c = new (window.AudioContext || window.webkitAudioContext)();
+        const o = c.createOscillator(); const g = c.createGain();
+        o.type = 'sine'; o.frequency.value = 220 + Math.random()*100;
+        g.gain.value = 0.0001;
+        o.connect(g); g.connect(c.destination);
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.06, c.currentTime + 0.02);
+        setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.12); o.stop(); }, 420);
+      }catch(e){ console.warn(e); }
+    }
+
+    /* ============================================================
+       Mini music window (if opened from OS window)
+       ============================================================ */
+    function initMiniMusic(win){
+      const canvas = win.querySelector('#miniViz');
+      const ctx = canvas.getContext('2d');
+      function size(){
+        const dpr = Math.min(window.devicePixelRatio || 1, CAP_DPR);
+        canvas.width = Math.floor(canvas.clientWidth * dpr);
+        canvas.height = Math.floor(canvas.clientHeight * dpr);
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+      }
+      size(); addEventListener('resize', size);
+      const playBtn = win.querySelector('#miniPlay');
+      playBtn.addEventListener('click', ()=>{
+        if(!audioEl.src){ playTinyTone(); return; }
+        if(audioEl.paused) { audioEl.play(); } else { audioEl.pause(); }
+      });
+      (function anim(){
+        ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+        if(analyser){
+          const temp = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteTimeDomainData(temp);
+          ctx.beginPath();
+          ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--accent-a');
+          ctx.moveTo(0,canvas.clientHeight/2);
+          for(let x=0;x<canvas.clientWidth;x+=4){
+            const y = canvas.clientHeight/2 + Math.sin((x+performance.now()*0.002))*20;
+            ctx.lineTo(x,y);
+          }
+          ctx.stroke();
+        }
+        requestAnimationFrame(anim);
+      })();
+    }
+
+    /* ============================================================
+       Particles spawn helper (visual flourish)
+       ============================================================ */
+    function spawnParticlesAtCenter(){
+      const n = 30;
+      for(let i=0;i<n;i++){
+        const p = document.createElement('div');
+        p.style.position='fixed';
+        p.style.left = (innerWidth/2 + (Math.random()-0.5)*80) + 'px';
+        p.style.top = (innerHeight/2 + (Math.random()-0.5)*80) + 'px';
+        const s = 6 + Math.random()*10; p.style.width = p.style.height = s + 'px';
+        p.style.borderRadius='50%';
+        p.style.pointerEvents='none';
+        p.style.zIndex = 320;
+        p.style.background = `radial-gradient(circle at 30% 30%, ${getComputedStyle(document.body).getPropertyValue('--accent-b') || '#9b6bff'}, transparent 60%)`;
+        p.style.boxShadow = `0 0 18px ${getComputedStyle(document.body).getPropertyValue('--accent-a') || '#66e0ff'}`;
+        document.body.appendChild(p);
+        const dx = (Math.random()-0.5)*800; const dy = (Math.random()-0.5)*600;
+        p.animate([{ transform:'translate(0,0) scale(1)', opacity:1 }, { transform:`translate(${dx}px, ${dy}px) scale(.2)`, opacity:0 }], { duration: 700 + Math.random()*700, easing:'cubic-bezier(.2,.8,.2,1)' }).onfinish = ()=> p.remove();
+      }
+    }
+
+    function spawnParticlesAt(x,y){
+      const n=18;
+      for(let i=0;i<n;i++){
+        const p = document.createElement('div');
+        p.style.position='fixed'; p.style.left = (x + (Math.random()-0.5)*40) + 'px'; p.style.top = (y + (Math.random()-0.5)*40) + 'px';
+        const s = 5 + Math.random()*8; p.style.width = p.style.height = s + 'px';
+        p.style.borderRadius='50%'; p.style.pointerEvents='none'; p.style.zIndex=320;
+        p.style.background = `radial-gradient(circle at 30% 30%, ${getComputedStyle(document.body).getPropertyValue('--accent-a') || '#66e0ff'}, transparent 60%)`;
+        p.style.boxShadow = `0 0 18px ${getComputedStyle(document.body).getPropertyValue('--accent-a') || '#66e0ff'}`;
+        document.body.appendChild(p);
+        const dx=(Math.random()-0.5)*300; const dy=(Math.random()-0.5)*300;
+        p.animate([{ transform:'translate(0,0) scale(1)', opacity:1 }, { transform:`translate(${dx}px, ${dy}px) scale(.2)`, opacity:0}], { duration:500 + Math.random()*700, easing:'cubic-bezier(.2,.8,.2,1)' }).onfinish = ()=> p.remove();
+      }
+    }
+
+    /* ============================================================
+       Hide dock when keyboard is open (Android)
+       ============================================================ */
+    (function handleKeyboardDock() {
+      const dock = document.querySelector('.dock');
+      if (!dock) return;
+      const hide = () => dock.classList.add('hide');
+      const show = () => dock.classList.remove('hide');
+      document.addEventListener('focusin', e => {
+        if (e.target.matches('input, textarea, [contenteditable], select')) hide();
+      });
+      document.addEventListener('focusout', show);
+
+      if (window.visualViewport) {
+        const adjust = () => {
+          const vv = window.visualViewport;
+          const keyboard = Math.max(0, (window.innerHeight - vv.height - vv.offsetTop));
+          dock.style.bottom = `calc(${keyboard}px + env(safe-area-inset-bottom, 0px) + 12px)`;
+        };
+        visualViewport.addEventListener('resize', adjust);
+        visualViewport.addEventListener('scroll', adjust);
+        adjust();
+      }
+    })();
+
+    /* ============================================================
+       Palette accessibility: trap focus (basic)
+       ============================================================ */
+    palette.addEventListener('keydown', e => {
+      if(e.key === 'Tab'){
+        const focusable = palette.querySelectorAll('input, button, [tabindex]:not([tabindex="-1"])');
+        if(!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+      }
+    });
+
+    /* ============================================================
+       Small service worker caching for offline feel
+       ============================================================ */
+    if('serviceWorker' in navigator){
+      addEventListener('load', ()=>{
+        const code = `
+          self.addEventListener('install', e => { e.waitUntil(caches.open('bn-v1').then(c => c.addAll(['./'])).catch(()=>{})); });
+          self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)).catch(()=>{})); });
+        `;
+        const blob = new Blob([code], { type: 'application/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+      });
+    }
+
+    /* ============================================================
+       Small onboarding + quick demo actions
+       ============================================================ */
+    document.addEventListener('DOMContentLoaded', () => {
+      const audioEl = document.getElementById('audio');
+      if (!audioEl) return;
+      audioEl.volume = 0.5; // start at half volume
+      audioEl.play().then(() => {
+        // Autoplay worked, unmute
+        audioEl.muted = false;
+      }).catch(() => {
+        // Autoplay blocked, unmute & play after first click
+        document.body.addEventListener('click', () => {
+          audioEl.muted = false;
+          audioEl.play();
+        }, { once: true });
+      });
+    });
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      toast('Welcome to BeatsNecker Quantum OS — local demo');
+      // Attach click spawn
+      document.body.addEventListener('click', e => {
+        if(e.target.classList.contains('dock-btn') || e.target.closest('.btn')) return;
+        spawnParticlesAt(e.clientX, e.clientY);
+      });
+    });
+
+    // expose a few functions for debugging
+    window.BEATS = { openWindow, closeWindow, spawnParticlesAtCenter, playTinyTone, toast };
+  </script>
+</body>
+</html>
